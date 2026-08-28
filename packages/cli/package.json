@@ -1,6 +1,6 @@
 {
   "name": "greview-cli",
-  "version": "0.12.4",
+  "version": "0.13.0",
   "description": "Review local Git diffs with humans and coding agents",
   "license": "MIT",
   "type": "module",

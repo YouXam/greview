@@ -80,6 +80,20 @@ function runRawEnv(
   return { status: r.status ?? 1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
 }
 
+function runRawInputEnv(
+  cwd: string,
+  input: string,
+  env: Record<string, string>,
+  ...args: string[]
+): { status: number; stdout: string; stderr: string } {
+  const r = spawnSync(
+    process.execPath,
+    ['--experimental-strip-types', '--no-warnings', CLI, ...args, '--cwd', cwd],
+    { cwd, encoding: 'utf8', env: cleanEnv(env), input },
+  );
+  return { status: r.status ?? 1, stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+}
+
 function runEnv<T>(cwd: string, env: Record<string, string>, ...args: string[]): T {
   const r = runRawEnv(cwd, env, ...args);
   const parsed = JSON.parse(r.stdout) as CliResult<T>;
@@ -112,8 +126,68 @@ function makeRepo(lines: string[]): string {
 
 const base = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight'];
 
+test('global help includes agent skill guidance and works outside a repository', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'greview-help-test-'));
+  scratch.push(dir);
+  const result = runRaw(dir, 'help');
+
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /greview setup skill/);
+  assert.match(result.stdout, /npx --yes skills add YouXam\/greview --skill greview/);
+  assert.match(result.stdout, /github\.com\/YouXam\/greview\/tree\/main\/skills\/greview/);
+});
+
+test('every command and nested subcommand has help outside a repository', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'greview-command-help-test-'));
+  scratch.push(dir);
+  const cases: Array<{ args: string[]; usage: RegExp }> = [
+    { args: ['list'], usage: /Usage:\n  greview list/ },
+    { args: ['show'], usage: /Usage:\n  greview show/ },
+    { args: ['add'], usage: /Usage:\n  greview add/ },
+    { args: ['reply'], usage: /Usage:\n  greview reply/ },
+    { args: ['edit'], usage: /Usage:\n  greview edit/ },
+    { args: ['resolve'], usage: /Usage:\n  greview resolve/ },
+    { args: ['unresolve'], usage: /Usage:\n  greview unresolve/ },
+    { args: ['rm'], usage: /Usage:\n  greview rm/ },
+    { args: ['sync'], usage: /Usage:\n  greview sync/ },
+    { args: ['stats'], usage: /Usage:\n  greview stats/ },
+    { args: ['repo'], usage: /Usage:\n  greview repo/ },
+    { args: ['setup'], usage: /Usage:\n  greview setup/ },
+    { args: ['setup', 'skill'], usage: /Usage:\n  greview setup skill/ },
+    { args: ['setup', 'extension'], usage: /Usage:\n  greview setup extension/ },
+    { args: ['onsubmit'], usage: /Usage:\n  greview onsubmit/ },
+    { args: ['onsubmit', 'list'], usage: /Usage:\n  greview onsubmit list/ },
+    { args: ['onsubmit', 'add'], usage: /Usage:\n  greview onsubmit add/ },
+    { args: ['onsubmit', 'delete'], usage: /Usage:\n  greview onsubmit delete/ },
+    { args: ['onsubmit', 'clear'], usage: /Usage:\n  greview onsubmit clear/ },
+    { args: ['onsubmit', 'run'], usage: /Usage:\n  greview onsubmit run/ },
+    { args: ['help', 'help'], usage: /Usage:\n  greview help/ },
+    { args: ['version'], usage: /Usage:\n  greview version/ },
+  ];
+
+  for (const item of cases) {
+    const result = runRaw(dir, ...item.args, '--help');
+    assert.equal(result.status, 0, `${item.args.join(' ')}: ${result.stderr}`);
+    assert.match(result.stdout, item.usage, item.args.join(' '));
+  }
+});
+
+test('help command matches command --help and rejects unknown topics', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'greview-help-routing-test-'));
+  scratch.push(dir);
+
+  const direct = runRaw(dir, 'onsubmit', 'add', '--help');
+  const routed = runRaw(dir, 'help', 'onsubmit', 'add');
+  assert.equal(routed.status, 0, routed.stderr);
+  assert.equal(routed.stdout, direct.stdout);
+
+  const unknown = runRaw(dir, 'help', 'does-not-exist');
+  assert.equal(unknown.status, 2);
+  assert.match(unknown.stderr, /no help topic/);
+});
+
 test(
-  'install-skill delegates to the skills CLI without requiring a git repository',
+  'setup skill delegates to the interactive skills CLI without requiring a git repository',
   { skip: process.platform === 'win32' },
   () => {
     const dir = mkdtempSync(join(tmpdir(), 'greview-skill-test-'));
@@ -129,7 +203,8 @@ test(
         GREVIEW_TEST_ARGS: argsPath,
         PATH: `${dir}:${process.env.PATH ?? ''}`,
       },
-      'install-skill',
+      'setup',
+      'skill',
     );
 
     assert.equal(result.status, 0, result.stderr);
@@ -141,6 +216,75 @@ test(
       '--skill',
       'greview',
     ]);
+  },
+);
+
+test(
+  'setup extension delegates to the VS Code CLI without requiring a git repository',
+  { skip: process.platform === 'win32' },
+  () => {
+    const dir = mkdtempSync(join(tmpdir(), 'greview-extension-test-'));
+    scratch.push(dir);
+    const argsPath = join(dir, 'args.txt');
+    const fakeCode = join(dir, 'code');
+    writeFileSync(fakeCode, '#!/bin/sh\nprintf "%s\\n" "$@" > "$GREVIEW_TEST_ARGS"\n');
+    chmodSync(fakeCode, 0o755);
+
+    const result = runRawEnv(
+      dir,
+      { GREVIEW_TEST_ARGS: argsPath, PATH: `${dir}:${process.env.PATH ?? ''}` },
+      'setup',
+      'extension',
+    );
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(readFileSync(argsPath, 'utf8').trimEnd().split('\n'), [
+      '--install-extension',
+      'youxam.greview',
+    ]);
+  },
+);
+
+test(
+  'setup extension explains how to install when the VS Code CLI is unavailable',
+  { skip: process.platform === 'win32' },
+  () => {
+    const dir = mkdtempSync(join(tmpdir(), 'greview-no-code-test-'));
+    scratch.push(dir);
+
+    const result = runRawEnv(dir, { PATH: dir }, 'setup', 'extension');
+
+    assert.equal(result.status, 1);
+    assert.match(result.stderr, /could not start code/);
+    assert.match(result.stderr, /marketplace\.visualstudio\.com\/items\?itemName=youxam\.greview/);
+  },
+);
+
+test(
+  'setup interactively installs both selected components',
+  { skip: process.platform === 'win32' },
+  () => {
+    const dir = mkdtempSync(join(tmpdir(), 'greview-setup-test-'));
+    scratch.push(dir);
+    const npxArgs = join(dir, 'npx-args.txt');
+    const codeArgs = join(dir, 'code-args.txt');
+    writeFileSync(join(dir, 'npx'), `#!/bin/sh\nprintf "%s\\n" "$@" > "${npxArgs}"\n`);
+    writeFileSync(join(dir, 'code'), `#!/bin/sh\nprintf "%s\\n" "$@" > "${codeArgs}"\n`);
+    chmodSync(join(dir, 'npx'), 0o755);
+    chmodSync(join(dir, 'code'), 0o755);
+
+    const result = runRawInputEnv(dir, '3\n', { PATH: `${dir}:${process.env.PATH ?? ''}` }, 'setup');
+
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /1\) Agent skill/);
+    assert.equal(
+      readFileSync(npxArgs, 'utf8').trimEnd(),
+      ['--yes', 'skills', 'add', 'YouXam/greview', '--skill', 'greview'].join('\n'),
+    );
+    assert.equal(
+      readFileSync(codeArgs, 'utf8').trimEnd(),
+      ['--install-extension', 'youxam.greview'].join('\n'),
+    );
   },
 );
 

@@ -24,7 +24,7 @@ greview list --json
 Install the agent skill:
 
 ```sh
-greview install-skill
+greview setup skill
 ```
 
 ## Settings

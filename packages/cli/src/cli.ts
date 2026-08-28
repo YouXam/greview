@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util';
 import { readFileSync } from 'node:fs';
 import { spawn, spawnSync } from 'node:child_process';
+import { createInterface } from 'node:readline/promises';
 import { splitLines } from './anchor.ts';
 import {
   branchName,
@@ -14,6 +15,7 @@ import {
   type Repo,
 } from './git.ts';
 import { dbPathFor, Store } from './store.ts';
+import { commandHelp, globalHelp } from './help.ts';
 import { resolveThread, syncAll, syncThread, toThread } from './sync.ts';
 import { bold, cyan, dim, threadDetail, threadLine, yellow } from './format.ts';
 import type {
@@ -39,67 +41,6 @@ function packageVersion(): string {
 
 const VERSION = packageVersion();
 
-const USAGE = `greview ${VERSION} — review threads anchored to git diffs
-
-Usage: greview <command> [options]
-
-Commands
-  list                     List threads (open ones by default)
-  show <id>                One thread in full, with before/after and history
-  add                      Start a thread on a line range
-  reply <id> -m <text>     Add a comment to a thread
-  edit <comment-id> -m <t> Rewrite one comment (ids shown by "show")
-  resolve <id>             Mark resolved            unresolve <id>   reopen
-  rm <id>                  Delete a thread and its comments
-  sync                     Re-anchor every thread and record what moved
-  stats                    Counts, for status lines and hooks
-  repo                     Repo root, git dir and database path
-  install-skill            Install the greview skill for coding agents
-  onsubmit <sub>           Commands to run when the reviewer presses Submit:
-                             list                    show this worktree's hooks
-                             add <name> <command>     add or replace one
-                             delete <name>            remove one
-                             clear                    remove all
-                             run                      run them all, concurrently
-
-Options
-  --cwd <dir>              Run as if in this directory (default: cwd)
-  --json                   Machine-readable output; every response is
-                           {"ok":true,"data":...} or {"ok":false,"error":"..."}
-
-  list/show
-  --all                    Include resolved threads
-  --resolved               Only resolved threads
-  --file <path>            Restrict to one file
-  --target <t>             Restrict to worktree | index | head
-  --events                 Include the event history in --json output
-  --no-sync                Skip re-anchoring; report the last known positions
-
-  add
-  --file <path>            File to comment on (required)
-  --line <n|n-m>           Line range in the current version (required)
-  --side new|old           Diff side (default: new)
-  --target worktree|index|head
-                           Which diff the comment belongs to (default: worktree)
-  -m, --message <text>     Comment body; use "-" to read stdin
-
-  add/reply/edit/resolve
-  --author <name>          Default: $GREVIEW_AUTHOR, then git config user.name for
-                           a person, or the agent's own name for an agent
-  --agent                  Record the author as an agent rather than a human.
-                           Implied when $AI_AGENT or $CLAUDECODE is set; override
-                           with GREVIEW_AUTHOR_KIND=human. An agent is never
-                           recorded under git config user.name.
-
-Submit hooks are per-worktree and run through the shell with no arguments. They
-are how something outside greview hears that a review is ready; greview does not
-care what they do.
-
-Anchoring: a thread stores the exact text of the lines it was written against.
-Later, "drift" says what became of them — current, moved, changed or orphaned.
-Nothing is ever auto-resolved; resolving is a human decision.
-`;
-
 class UsageError extends Error {}
 
 const SKILL_INSTALL_ARGS = [
@@ -110,23 +51,91 @@ const SKILL_INSTALL_ARGS = [
   '--skill',
   'greview',
 ];
+const EXTENSION_ID = 'youxam.greview';
+const MARKETPLACE_URL = `https://marketplace.visualstudio.com/items?itemName=${EXTENSION_ID}`;
 
 function fail(message: string): never {
   throw new UsageError(message);
 }
 
-function cmdInstallSkill(): number {
-  const executable = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  const result = spawnSync(executable, SKILL_INSTALL_ARGS, { stdio: 'inherit' });
+function runInstaller(executable: string, args: string[], missingHelp: string): number {
+  const result = spawnSync(executable, args, { stdio: 'inherit' });
   if (result.error) {
-    process.stderr.write(`greview: could not start npx: ${result.error.message}\n`);
+    process.stderr.write(`greview: could not start ${executable}: ${result.error.message}\n${missingHelp}\n`);
     return 1;
   }
   if (result.signal) {
-    process.stderr.write(`greview: skill installer stopped by ${result.signal}\n`);
+    process.stderr.write(`greview: ${executable} stopped by ${result.signal}\n`);
     return 1;
   }
   return result.status ?? 1;
+}
+
+function installSkill(): number {
+  const executable = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  return runInstaller(
+    executable,
+    SKILL_INSTALL_ARGS,
+    'Install Node.js with npm, then run `greview setup skill` again.',
+  );
+}
+
+function installExtension(): number {
+  const executable = process.platform === 'win32' ? 'code.cmd' : 'code';
+  return runInstaller(
+    executable,
+    ['--install-extension', EXTENSION_ID],
+    `Install from ${MARKETPLACE_URL}, or add the VS Code \`code\` command to PATH.`,
+  );
+}
+
+type SetupComponent = 'skill' | 'extension';
+
+function installComponents(components: SetupComponent[]): number {
+  let status = 0;
+  for (const component of components) {
+    const result = component === 'skill' ? installSkill() : installExtension();
+    if (result !== 0) status = result;
+  }
+  return status;
+}
+
+async function interactiveSetup(): Promise<number> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  let components: SetupComponent[] | null = null;
+  try {
+    process.stdout.write(
+      'greview setup\n\n' +
+        '  1) Agent skill\n' +
+        '  2) VS Code extension\n' +
+        '  3) Both\n\n',
+    );
+    const answer = (await rl.question('Select components [1-3, q to cancel]: ')).trim().toLowerCase();
+    if (answer === '1' || answer === 'skill') components = ['skill'];
+    else if (answer === '2' || answer === 'extension') components = ['extension'];
+    else if (answer === '3' || answer === 'both') components = ['skill', 'extension'];
+    else if (answer === 'q' || answer === 'quit' || answer === '') return 0;
+    else {
+      process.stderr.write(`greview: unknown setup selection "${answer}"\n`);
+      return 2;
+    }
+  } finally {
+    rl.close();
+  }
+  if (components === null) return 0;
+  return installComponents(components);
+}
+
+function cmdSetup(positionals: string[]): number | Promise<number> {
+  if (positionals.length > 2) {
+    process.stderr.write('greview: usage: greview setup [skill|extension]\n');
+    return 2;
+  }
+  const component = positionals[1];
+  if (component === undefined) return interactiveSetup();
+  if (component === 'skill' || component === 'extension') return installComponents([component]);
+  process.stderr.write(`greview: unknown setup component "${component}" (skill or extension)\n`);
+  return 2;
 }
 
 interface Ctx {
@@ -583,6 +592,20 @@ function cmdStats(ctx: Ctx): void {
   );
 }
 
+function printHelp(parts: string[]): number {
+  if (parts.length === 0) {
+    process.stdout.write(globalHelp(VERSION));
+    return 0;
+  }
+  const text = commandHelp(parts);
+  if (text === null) {
+    process.stderr.write(`greview: no help topic for "${parts.join(' ')}"\nTry: greview help\n`);
+    return 2;
+  }
+  process.stdout.write(text);
+  return 0;
+}
+
 function main(argv: string[]): number | Promise<number> {
   let values: Values;
   let positionals: string[];
@@ -594,15 +617,13 @@ function main(argv: string[]): number | Promise<number> {
   }
 
   const command = positionals[0] ?? (values.version ? 'version' : 'help');
-  if (values.help || command === 'help') {
-    process.stdout.write(USAGE);
-    return 0;
-  }
+  if (command === 'help') return printHelp(positionals.slice(1));
+  if (values.help) return printHelp(positionals);
   if (command === 'version') {
     process.stdout.write(`${VERSION}\n`);
     return 0;
   }
-  if (command === 'install-skill') return cmdInstallSkill();
+  if (command === 'setup') return cmdSetup(positionals);
 
   let ctx: Ctx | null = null;
   try {

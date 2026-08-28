@@ -13,6 +13,17 @@ line.
 Threads are the user's, not yours. Your job is to read them, fix what they point
 at, and reply. **Never resolve a thread** — see [Rules](#rules).
 
+## Prerequisite
+
+Before the first greview command, run `greview --version`. If the command is not
+available, tell the user that the CLI is required and ask before installing it:
+
+```sh
+npm install --global greview-cli
+```
+
+If `npm` is unavailable, stop and ask the user to install Node.js with npm.
+
 ## Finding out whether there is anything to do
 
 ```sh
@@ -141,7 +152,7 @@ greview edit <comment-id> -m TEXT                    rewrite one of your comment
 greview sync                                         re-anchor everything now
 greview stats                                        counts
 greview repo                                         root, git dir, db path
-greview install-skill                                install this agent skill
+greview setup [skill|extension]                      install greview components
 greview onsubmit list                                commands run when the user
                                                      presses Submit in the panel
 ```

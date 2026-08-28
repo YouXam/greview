@@ -8,12 +8,18 @@ Read and reply to review comments attached to local Git diffs.
 npm install --global greview-cli
 ```
 
-The npm package is named `greview-cli`; it installs the `greview` command.
-
-Install the companion agent skill:
+The npm package is named `greview-cli`; it installs the `greview` command. Run
+the guided setup to install the VS Code extension, agent skill, or both:
 
 ```sh
-greview install-skill
+greview setup
+```
+
+Install one component directly:
+
+```sh
+greview setup skill
+greview setup extension
 ```
 
 ## Quick start

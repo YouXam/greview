@@ -10,23 +10,20 @@ the reviewed code changes. Only the reviewer decides when a thread is resolved.
 
 ## Install
 
-Install [greview from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=youxam.greview),
-or search for `greview` in the Extensions view.
-
-Install the CLI for coding agents:
+Install the CLI:
 
 ```sh
 npm install --global greview-cli
 ```
 
-Install the companion skill:
+Then choose the VS Code extension, agent skill, or both:
 
 ```sh
-greview install-skill
+greview setup
 ```
 
-The extension includes its own CLI, so VS Code works without a global install.
-The global command is for agents and terminal use.
+You can also install [greview from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=youxam.greview)
+directly, or search for `greview` in the Extensions view.
 
 ## Use in VS Code
 
@@ -46,6 +43,8 @@ greview list
 greview show 3
 greview reply 3 --agent --author codex -m "Handled the empty input case."
 greview stats
+greview setup skill
+greview setup extension
 ```
 
 Every command supports `--json` for agent integrations. Run `greview help` for
