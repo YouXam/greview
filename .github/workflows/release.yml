@@ -1,0 +1,89 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.9.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Upgrade npm for trusted publishing
+        run: npm install --global npm@latest
+
+      - name: Read release version
+        id: version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG#v}"
+          node -e 'if (!/^\d+\.\d+\.\d+$/.test(process.argv[1] ?? "")) process.exit(1)' "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply tag version
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          npm pkg set "version=$VERSION"
+          npm --prefix packages/cli pkg set "version=$VERSION"
+          npm --prefix packages/extension pkg set "version=$VERSION"
+
+      - name: Test
+        run: |
+          pnpm test
+          pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Package extension
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p artifacts
+          pnpm --filter greview exec vsce package --no-dependencies --out "../../artifacts/greview-$VERSION.vsix"
+
+      - name: Publish CLI to npm
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if npm view "greview-cli@$VERSION" version >/dev/null 2>&1; then
+            echo "greview-cli@$VERSION is already published"
+          else
+            npm publish ./packages/cli --access public
+          fi
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: greview ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: artifacts/*.vsix

@@ -1,0 +1,43 @@
+{
+  "name": "greview-cli",
+  "version": "0.12.2",
+  "description": "Review local Git diffs with humans and coding agents",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "greview": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test --experimental-strip-types 'test/*.test.ts'"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YouXam/greview.git",
+    "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/YouXam/greview/issues"
+  },
+  "homepage": "https://github.com/YouXam/greview#readme",
+  "keywords": [
+    "git",
+    "diff",
+    "review",
+    "comments",
+    "code-review",
+    "agent",
+    "cli"
+  ]
+}

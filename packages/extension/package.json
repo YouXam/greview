@@ -1,0 +1,371 @@
+{
+  "name": "greview",
+  "displayName": "%displayName%",
+  "description": "%description%",
+  "version": "0.12.2",
+  "publisher": "youxam",
+  "license": "MIT",
+  "private": true,
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "review",
+    "comments",
+    "diff",
+    "git",
+    "agent"
+  ],
+  "icon": "icon.png",
+  "l10n": "./l10n",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test --experimental-strip-types 'test/*.test.ts'",
+    "package": "node build.mjs && vsce package --no-dependencies --out greview.vsix"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.2.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/YouXam/greview.git",
+    "directory": "packages/extension"
+  },
+  "bugs": {
+    "url": "https://github.com/YouXam/greview/issues"
+  },
+  "homepage": "https://github.com/YouXam/greview#readme",
+  "contributes": {
+    "commands": [
+      {
+        "command": "greview.createThread",
+        "title": "%cmd.createThread%",
+        "category": "greview"
+      },
+      {
+        "command": "greview.replyThread",
+        "title": "%cmd.replyThread%",
+        "category": "greview",
+        "icon": "$(reply)"
+      },
+      {
+        "command": "greview.resolveThread",
+        "title": "%cmd.resolveThread%",
+        "category": "greview",
+        "icon": "$(check)"
+      },
+      {
+        "command": "greview.unresolveThread",
+        "title": "%cmd.unresolveThread%",
+        "category": "greview",
+        "icon": "$(history)"
+      },
+      {
+        "command": "greview.deleteThread",
+        "title": "%cmd.deleteThread%",
+        "category": "greview",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "greview.submit",
+        "title": "%cmd.submit%",
+        "category": "greview",
+        "icon": "$(run-all)"
+      },
+      {
+        "command": "greview.clearHooks",
+        "title": "%cmd.clearHooks%",
+        "category": "greview",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "greview.refresh",
+        "title": "%cmd.refresh%",
+        "category": "greview",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "greview.openThread",
+        "title": "%cmd.openThread%",
+        "category": "greview"
+      },
+      {
+        "command": "greview.editComment",
+        "title": "%cmd.editComment%",
+        "category": "greview",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "greview.submitDraft",
+        "title": "%cmd.submitDraft%",
+        "category": "greview"
+      },
+      {
+        "command": "greview.discardDraft",
+        "title": "%cmd.discardDraft%",
+        "category": "greview"
+      },
+      {
+        "command": "greview.saveComment",
+        "title": "%cmd.saveComment%",
+        "category": "greview"
+      },
+      {
+        "command": "greview.cancelComment",
+        "title": "%cmd.cancelComment%",
+        "category": "greview"
+      },
+      {
+        "command": "greview.showResolvedThreads",
+        "title": "%cmd.showResolved%",
+        "category": "greview",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "greview.hideResolvedThreads",
+        "title": "%cmd.hideResolved%",
+        "category": "greview",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "greview.copyRef",
+        "title": "%cmd.copyRef%",
+        "category": "greview"
+      },
+      {
+        "command": "greview.focusList",
+        "title": "%cmd.focusList%",
+        "category": "greview"
+      },
+      {
+        "command": "greview.diagnose",
+        "title": "%cmd.diagnose%",
+        "category": "greview"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "greview.createThread",
+          "when": "false"
+        },
+        {
+          "command": "greview.replyThread",
+          "when": "false"
+        },
+        {
+          "command": "greview.resolveThread",
+          "when": "false"
+        },
+        {
+          "command": "greview.unresolveThread",
+          "when": "false"
+        },
+        {
+          "command": "greview.deleteThread",
+          "when": "false"
+        },
+        {
+          "command": "greview.openThread",
+          "when": "false"
+        },
+        {
+          "command": "greview.copyRef",
+          "when": "false"
+        },
+        {
+          "command": "greview.editComment",
+          "when": "false"
+        },
+        {
+          "command": "greview.saveComment",
+          "when": "false"
+        },
+        {
+          "command": "greview.cancelComment",
+          "when": "false"
+        },
+        {
+          "command": "greview.submitDraft",
+          "when": "false"
+        },
+        {
+          "command": "greview.discardDraft",
+          "when": "false"
+        }
+      ],
+      "comments/commentThread/context": [
+        {
+          "command": "greview.createThread",
+          "group": "inline@1",
+          "when": "commentController == greview && commentThreadIsEmpty"
+        }
+      ],
+      "comments/commentThread/title": [
+        {
+          "command": "greview.replyThread",
+          "group": "inline@1",
+          "when": "commentController == greview && commentThread =~ /open|resolved/"
+        },
+        {
+          "command": "greview.resolveThread",
+          "group": "inline@2",
+          "when": "commentController == greview && commentThread == open"
+        },
+        {
+          "command": "greview.unresolveThread",
+          "group": "inline@2",
+          "when": "commentController == greview && commentThread == resolved"
+        },
+        {
+          "command": "greview.deleteThread",
+          "group": "inline@3",
+          "when": "commentController == greview && commentThread =~ /open|resolved/"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "greview.showResolvedThreads",
+          "group": "navigation@1",
+          "when": "view == greview.threads && !greview.showResolved"
+        },
+        {
+          "command": "greview.hideResolvedThreads",
+          "group": "navigation@1",
+          "when": "view == greview.threads && greview.showResolved"
+        },
+        {
+          "command": "greview.refresh",
+          "group": "navigation@2",
+          "when": "view == greview.threads"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "greview.submit",
+          "group": "inline@1",
+          "when": "view == greview.threads && viewItem == greview.action.submit"
+        },
+        {
+          "command": "greview.clearHooks",
+          "group": "inline@1",
+          "when": "view == greview.threads && viewItem == greview.action.clear"
+        },
+        {
+          "command": "greview.resolveThread",
+          "group": "inline@1",
+          "when": "view == greview.threads && viewItem == greview.thread.open"
+        },
+        {
+          "command": "greview.unresolveThread",
+          "group": "inline@1",
+          "when": "view == greview.threads && viewItem == greview.thread.resolved"
+        },
+        {
+          "command": "greview.copyRef",
+          "group": "1_copy",
+          "when": "view == greview.threads && viewItem =~ /greview.thread/"
+        },
+        {
+          "command": "greview.deleteThread",
+          "group": "9_danger",
+          "when": "view == greview.threads && viewItem =~ /greview.thread/"
+        }
+      ],
+      "comments/comment/title": [
+        {
+          "command": "greview.editComment",
+          "group": "group@1",
+          "when": "commentController == greview && comment == editable"
+        }
+      ],
+      "comments/comment/context": [
+        {
+          "command": "greview.submitDraft",
+          "group": "inline@1",
+          "when": "commentController == greview && comment == draft"
+        },
+        {
+          "command": "greview.discardDraft",
+          "group": "inline@2",
+          "when": "commentController == greview && comment == draft"
+        },
+        {
+          "command": "greview.saveComment",
+          "group": "inline@1",
+          "when": "commentController == greview && comment == editable"
+        },
+        {
+          "command": "greview.cancelComment",
+          "group": "inline@2",
+          "when": "commentController == greview && comment == editable"
+        }
+      ]
+    },
+    "views": {
+      "scm": [
+        {
+          "id": "greview.threads",
+          "name": "%view.threads%",
+          "contextualTitle": "%view.threads%",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "greview.threads",
+        "contents": "%welcome%"
+      }
+    ],
+    "configuration": {
+      "title": "greview",
+      "properties": {
+        "greview.author": {
+          "type": "string",
+          "default": "",
+          "description": "%config.author%"
+        },
+        "greview.batchSubmit": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "%config.batchSubmit%"
+        },
+        "greview.cliPath": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "%config.cliPath%"
+        },
+        "greview.commentableLines": {
+          "type": "string",
+          "enum": [
+            "anywhere",
+            "changed-only"
+          ],
+          "enumDescriptions": [
+            "%config.commentableLines.anywhere%",
+            "%config.commentableLines.changedOnly%"
+          ],
+          "default": "anywhere",
+          "markdownDescription": "%config.commentableLines%"
+        },
+        "greview.statusBar": {
+          "type": "boolean",
+          "default": true,
+          "description": "%config.statusBar%"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "vscode"],
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@greview/protocol": ["../cli/src/protocol.ts"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "../cli/src/protocol.ts"]
+}

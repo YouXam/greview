@@ -1,0 +1,18 @@
+{
+  "name": "greview-workspace",
+  "private": true,
+  "version": "0.12.2",
+  "description": "Review local Git diffs with humans and coding agents",
+  "scripts": {
+    "build": "pnpm --filter greview-cli build && pnpm --filter greview build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "package": "pnpm build && pnpm --filter greview package",
+    "install:cli": "pnpm --filter greview-cli build && npm i -g ./packages/cli"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0"
+  },
+  "packageManager": "pnpm@11.9.0"
+}
