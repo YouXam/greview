@@ -107,16 +107,8 @@ const SKILL_INSTALL_ARGS = [
   'skills',
   'add',
   'YouXam/greview',
-  '--agent',
-  'codex',
-  'claude-code',
-  'github-copilot',
-  'opencode',
-  'openclaw',
   '--skill',
   'greview',
-  '--global',
-  '--yes',
 ];
 
 function fail(message: string): never {
