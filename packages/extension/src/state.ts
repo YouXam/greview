@@ -29,7 +29,10 @@ export class ReviewState implements vscode.Disposable {
 
   readonly onDidChange = this.changed.event;
 
-  constructor(private readonly cli: Cli) {}
+  constructor(
+    private readonly cli: Cli,
+    private readonly log: vscode.LogOutputChannel,
+  ) {}
 
   dispose(): void {
     this.changed.dispose();
@@ -110,9 +113,11 @@ export class ReviewState implements vscode.Disposable {
   }
 
   private reportFailure(e: unknown): void {
+    const message = e instanceof Error ? e.message : String(e);
+    // The notification is one-shot per failure streak; the log gets every one.
+    this.log.error(message);
     if (this.reportedFailure) return;
     this.reportedFailure = true;
-    const message = e instanceof Error ? e.message : String(e);
     void vscode.window.showErrorMessage(l10n.t('greview: {0}', message));
   }
 

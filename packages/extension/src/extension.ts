@@ -44,8 +44,8 @@ export function activate(context: vscode.ExtensionContext): void {
     );
   }
 
-  const cli = new Cli(context.extensionPath);
-  const state = new ReviewState(cli);
+  const cli = new Cli(context.extensionPath, log);
+  const state = new ReviewState(cli, log);
   const comments = new Comments(state);
   const tree = new ThreadTree(state);
   const view = vscode.window.createTreeView('greview.threads', { treeDataProvider: tree });
@@ -433,6 +433,7 @@ export function activate(context: vscode.ExtensionContext): void {
       out.clear();
       out.appendLine(`extension version: ${version}`);
       out.appendLine(`extension path: ${context.extensionPath}`);
+      out.appendLine(`CLI launcher: ${cli.launcherLabel() ?? 'none resolved yet (no CLI call has succeeded)'}`);
       out.appendLine(`repositories: ${state.repoList().length}`);
       for (const repo of state.repoList()) {
         out.appendLine(`  ${repo.root}`);

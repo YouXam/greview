@@ -20,6 +20,7 @@ interface Launcher {
   command: string;
   prefix: string[];
   label: string;
+  env?: NodeJS.ProcessEnv;
 }
 
 export class CliError extends Error {}
@@ -29,12 +30,20 @@ export class Cli {
   private launcher: Launcher | null = null;
   private probe: Promise<Launcher> | null = null;
 
-  constructor(private readonly extensionPath: string) {}
+  constructor(
+    private readonly extensionPath: string,
+    private readonly log: vscode.LogOutputChannel,
+  ) {}
 
   /** Forget the cached launcher after `greview.cliPath` changes. */
   reset(): void {
     this.launcher = null;
     this.probe = null;
+  }
+
+  /** Which launcher won the probe, if one has yet. */
+  launcherLabel(): string | null {
+    return this.launcher?.label ?? null;
   }
 
   private candidates(): Launcher[] {
@@ -44,7 +53,16 @@ export class Cli {
     out.push({ command: 'greview', prefix: [], label: 'greview on PATH' });
     const bundled = join(this.extensionPath, 'dist', 'greview-cli.mjs');
     if (existsSync(bundled)) {
-      out.push({ command: 'node', prefix: [bundled], label: 'bundled CLI via node' });
+      // PATH may carry no `node` at all (remote servers ship their own runtime),
+      // but the extension host itself is one: execPath is that runtime. On the
+      // desktop it is Electron, which ELECTRON_RUN_AS_NODE turns into plain
+      // node; a real node binary ignores the variable.
+      out.push({
+        command: process.execPath,
+        prefix: [bundled],
+        label: `bundled CLI via ${process.execPath}`,
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      });
     }
     return out;
   }
@@ -56,11 +74,14 @@ export class Cli {
       const tried: string[] = [];
       for (const candidate of this.candidates()) {
         try {
-          await this.exec(candidate, ['--version'], undefined);
+          const version = await this.exec(candidate, ['--version'], undefined);
           this.launcher = candidate;
+          this.log.info(`using ${candidate.label}: ${version.trim()}`);
           return candidate;
         } catch (e) {
-          tried.push(`${candidate.label}: ${(e as Error).message.split('\n')[0]}`);
+          const reason = (e as Error).message.split('\n')[0];
+          this.log.warn(`${candidate.label}: ${reason}`);
+          tried.push(`${candidate.label}: ${reason}`);
         }
       }
       this.probe = null;
@@ -82,7 +103,7 @@ export class Cli {
       execFile(
         launcher.command,
         [...launcher.prefix, ...args],
-        { cwd, timeout, maxBuffer: 32 * 1024 * 1024, windowsHide: true },
+        { cwd, timeout, maxBuffer: 32 * 1024 * 1024, windowsHide: true, env: launcher.env },
         (error, stdout, stderr) => {
           // A non-zero exit still carries a JSON error payload on stdout.
           if (error && !stdout) {

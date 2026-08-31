@@ -2,7 +2,7 @@
   "name": "greview",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.13.0",
+  "version": "0.13.1",
   "publisher": "youxam",
   "license": "MIT",
   "private": true,

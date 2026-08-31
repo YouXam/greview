@@ -1,7 +1,7 @@
 {
   "name": "greview-workspace",
   "private": true,
-  "version": "0.13.0",
+  "version": "0.13.1",
   "description": "Review local Git diffs with humans and coding agents",
   "scripts": {
     "build": "pnpm --filter greview-cli build && pnpm --filter greview build",
