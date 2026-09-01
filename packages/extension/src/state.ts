@@ -3,6 +3,7 @@ import { l10n } from 'vscode';
 import type { Callback, RepoInfo, Thread } from '@greview/protocol';
 import { Cli, CliError } from './cli.ts';
 import type { DocLocation } from './locate.ts';
+import { physicalPath, relativeTo } from './refs.ts';
 import { threadSignature } from './render.ts';
 
 export interface Located {
@@ -10,12 +11,21 @@ export interface Located {
   thread: Thread;
 }
 
+interface KnownRepo extends RepoInfo {
+  /**
+   * The root as this window spells it: derived from the workspace folder, so it
+   * may run through symlinks. Editors must be opened with this spelling, or the
+   * same file splits into two buffers.
+   */
+  viewRoot: string;
+}
+
 /**
  * Which repositories are in the window and the threads each holds. A refresh
  * re-runs `greview list`, which re-anchors, so these positions are current.
  */
 export class ReviewState implements vscode.Disposable {
-  private readonly repos = new Map<string, RepoInfo>();
+  private readonly repos = new Map<string, KnownRepo>();
   private readonly threads = new Map<string, Thread[]>();
   private readonly hooks = new Map<string, Callback[]>();
   private readonly changed = new vscode.EventEmitter<void>();
@@ -49,7 +59,18 @@ export class ReviewState implements vscode.Disposable {
       if (folder.uri.scheme !== 'file') continue;
       try {
         const info = await this.cli.repo(folder.uri.fsPath);
-        this.repos.set(info.root, info);
+        // Everything downstream compares physical paths; the CLI's answer is
+        // usually physical already, but never trust that.
+        const root = physicalPath(info.root);
+        // The folder path spells the root the way the window does, minus the
+        // folder's own position inside the repository.
+        const folderPath = folder.uri.fsPath;
+        const rel = relativeTo(root, physicalPath(folderPath));
+        const suffix = rel === null ? '' : `/${rel}`;
+        const viewRoot = folderPath.endsWith(suffix)
+          ? folderPath.slice(0, folderPath.length - suffix.length)
+          : root;
+        this.repos.set(root, { ...info, root, viewRoot });
       } catch (e) {
         // A workspace folder that is not a checkout is normal.
         if (e instanceof CliError && /not a git repository|not inside a git working tree/.test(e.message)) {
@@ -68,6 +89,11 @@ export class ReviewState implements vscode.Disposable {
       if (inside && (best === null || root.length > best.length)) best = root;
     }
     return best;
+  }
+
+  /** How this window spells a repository root; the physical root when unknown. */
+  viewRootOf(root: string): string {
+    return this.repos.get(root)?.viewRoot ?? root;
   }
 
   /** Coalesces bursts of refresh requests into one CLI pass. */

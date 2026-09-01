@@ -4,7 +4,9 @@ import * as vscode from 'vscode';
 import { l10n } from 'vscode';
 import { Cli, CliError } from './cli.ts';
 import { bodyOf, Comments, type ThreadRef } from './comments.ts';
+import { ensureGitRepository } from './gitext.ts';
 import { diffUris } from './locate.ts';
+import { physicalPath } from './refs.ts';
 import { targetLabel, threadDescription } from './render.ts';
 import { ReviewState } from './state.ts';
 import { ThreadTree, type Node } from './tree.ts';
@@ -342,8 +344,21 @@ export function activate(context: vscode.ExtensionContext): void {
         if (ref === null) return;
         const thread = state.find(ref.root, ref.id);
         if (thread === undefined) return;
-        const fsPath = join(ref.root, thread.filePath);
+        // Spell the path the way the window does, so the diff shares documents
+        // with editors the user already has open.
+        const viewRoot = state.viewRootOf(ref.root);
+        const fsPath = join(viewRoot, thread.filePath);
         const [left, right] = diffUris(fsPath, thread.target);
+        if (!(await ensureGitRepository(viewRoot, vscode.Uri.file(fsPath)))) {
+          // Without the repository in the Git extension's model, the git: sides
+          // of the diff would fail as nonexistent files.
+          throw new CliError(
+            l10n.t(
+              'the built-in Git extension has no repository open at {0}, so it cannot show file contents from a git ref. Check that the Git extension is enabled and that this repository appears in the Source Control view.',
+              viewRoot,
+            ),
+          );
+        }
         const line = Math.max(0, (thread.current.region?.start ?? thread.anchor.start) - 1);
         await vscode.commands.executeCommand(
           'vscode.diff',
@@ -434,6 +449,12 @@ export function activate(context: vscode.ExtensionContext): void {
       out.appendLine(`extension version: ${version}`);
       out.appendLine(`extension path: ${context.extensionPath}`);
       out.appendLine(`CLI launcher: ${cli.launcherLabel() ?? 'none resolved yet (no CLI call has succeeded)'}`);
+      out.appendLine('workspace folders:');
+      for (const folder of vscode.workspace.workspaceFolders ?? []) {
+        const fsPath = folder.uri.fsPath;
+        const resolved = physicalPath(fsPath);
+        out.appendLine(`  ${fsPath}${resolved === fsPath ? '' : `  (physically ${resolved})`}`);
+      }
       out.appendLine(`repositories: ${state.repoList().length}`);
       for (const repo of state.repoList()) {
         out.appendLine(`  ${repo.root}`);

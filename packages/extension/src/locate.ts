@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { DiffTarget, Side } from '@greview/protocol';
-import { fsPathOf, placementOf, refOf, relativeTo, type DiffRole } from './refs.ts';
+import { fsPathOf, physicalPath, placementOf, refOf, relativeTo, type DiffRole } from './refs.ts';
 
 export interface DocLocation {
   /** Working tree root of the repository the document belongs to. */
@@ -42,9 +42,12 @@ export function locate(
   if (fsPath === null) return null;
   const ref = refOf(uri);
   if (ref === null) return null;
-  const root = rootFor(fsPath);
+  // A workspace opened through a symlink names documents by the symlinked
+  // path; roots are physical, so resolve before comparing.
+  const resolved = physicalPath(fsPath);
+  const root = rootFor(resolved);
   if (root === null) return null;
-  const filePath = relativeTo(root, fsPath);
+  const filePath = relativeTo(root, resolved);
   if (filePath === null) return null;
   const placement = placementOf(ref, roles.get(uri.toString()));
   if (placement === null) return null;

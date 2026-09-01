@@ -1,3 +1,5 @@
+import { realpathSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import type { DiffTarget, Side } from '@greview/protocol';
 
 /** The parts of a `vscode.Uri` this module needs. */
@@ -84,4 +86,27 @@ export function relativeTo(root: string, fsPath: string): string | null {
   if (!fsPath.startsWith(`${normalisedRoot}/`)) return null;
   const rel = fsPath.slice(normalisedRoot.length + 1);
   return rel === '' ? null : rel.split('\\').join('/');
+}
+
+/**
+ * The path with every symlink resolved. The editor knows a file by whatever
+ * path the workspace was opened under, while git reports the repository root
+ * physically — the two only compare after both are physical. A component that
+ * does not exist (a deleted file still names a diff) is kept as written, on
+ * top of the deepest ancestor that does resolve.
+ */
+export function physicalPath(fsPath: string): string {
+  let head = fsPath;
+  let tail = '';
+  for (;;) {
+    try {
+      const resolved = realpathSync(head);
+      return tail === '' ? resolved : join(resolved, tail);
+    } catch {
+      const parent = dirname(head);
+      if (parent === head) return fsPath;
+      tail = tail === '' ? basename(head) : join(basename(head), tail);
+      head = parent;
+    }
+  }
 }

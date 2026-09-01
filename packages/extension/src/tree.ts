@@ -127,7 +127,9 @@ export class ThreadTree implements vscode.TreeDataProvider<Node> {
         unresolved === element.threads.length
           ? `${unresolved}`
           : `${unresolved}/${element.threads.length}`;
-      item.resourceUri = vscode.Uri.file(`${element.root}/${element.filePath}`);
+      // Spelled as the window spells it, so decorations (diagnostics, git
+      // status) attach to the same URI the editors use.
+      item.resourceUri = vscode.Uri.file(`${this.state.viewRootOf(element.root)}/${element.filePath}`);
       item.contextValue = 'greview.file';
       item.iconPath = vscode.ThemeIcon.File;
       return item;

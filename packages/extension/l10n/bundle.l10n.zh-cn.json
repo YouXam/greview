@@ -37,6 +37,7 @@
   "old side": "旧侧",
   "since this comment": "这条评论之后",
   "staged": "暂存区",
+  "the built-in Git extension has no repository open at {0}, so it cannot show file contents from a git ref. Check that the Git extension is enabled and that this repository appears in the Source Control view.": "VS Code 内置 Git 扩展没有打开 {0} 这个仓库，无法展示 git ref 中的文件内容。请确认 Git 扩展已启用，且该仓库出现在源代码管理视图中。",
   "unstaged": "未暂存",
   "{0} diff": "{0} diff",
   "{0} no longer exists in the {1} version.": "{0} 在 {1} 版本中已不存在。",
