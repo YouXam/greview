@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import {
   WORKTREE,
   fsPathOf,
+  lastCommentableLine,
   pairTarget,
   physicalPath,
   placementOf,
@@ -149,4 +150,15 @@ test('a fully physical path is untouched', (t) => {
   const file = join(realpathSync(base), 'a.ts');
   writeFileSync(file, '');
   assert.equal(physicalPath(file), file);
+});
+
+test('the phantom line behind a trailing newline is not commentable', () => {
+  const doc = (lines: string[]) => ({
+    lineCount: lines.length,
+    lineAt: (i: number) => ({ text: lines[i] ?? '' }),
+  });
+  assert.equal(lastCommentableLine(doc(['a', 'b', ''])), 1, '"a\\nb\\n" has two lines');
+  assert.equal(lastCommentableLine(doc(['a', 'b'])), 1, 'no trailing newline, no phantom');
+  assert.equal(lastCommentableLine(doc(['a', '', ''])), 1, 'a real empty last line stays');
+  assert.equal(lastCommentableLine(doc([''])), null, 'an empty document has no lines');
 });

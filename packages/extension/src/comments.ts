@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { l10n } from 'vscode';
 import type { Comment as StoredCommentData, Thread } from '@greview/protocol';
 import { diffRoles, locate, type DocLocation } from './locate.ts';
+import { lastCommentableLine } from './refs.ts';
 import { commentLabel, driftMarkdown, rangeFor, threadLabel, threadSignature } from './render.ts';
 import type { ReviewState } from './state.ts';
 
@@ -168,7 +169,9 @@ export class Comments implements vscode.Disposable {
   /** Where a thread can be started: any diff side this tool models. */
   private commentableRanges(document: vscode.TextDocument): vscode.Range[] {
     const loc = locate(document.uri, diffRoles(), (p) => this.state.rootFor(p));
-    if (loc === null || document.lineCount === 0) return [];
+    if (loc === null) return [];
+    const last = lastCommentableLine(document);
+    if (last === null) return [];
     const mode = vscode.workspace
       .getConfiguration('greview')
       .get<string>('commentableLines', 'anywhere');
@@ -177,7 +180,7 @@ export class Comments implements vscode.Disposable {
       const existing = this.state.at(loc).map((t) => rangeFor(t));
       if (existing.length > 0) return existing;
     }
-    return [new vscode.Range(0, 0, document.lineCount - 1, 0)];
+    return [new vscode.Range(0, 0, last, 0)];
   }
 
   /** Finds every open document each stored thread should appear in. */

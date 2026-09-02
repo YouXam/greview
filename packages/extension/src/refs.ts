@@ -79,6 +79,24 @@ export function placementOf(ref: string, role: DiffRole | undefined): Placement 
   return null;
 }
 
+/** The parts of a `vscode.TextDocument` this module needs. */
+export interface DocumentLines {
+  lineCount: number;
+  lineAt(line: number): { text: string };
+}
+
+/**
+ * The last 0-based line a comment can anchor to; null for an empty document.
+ * A file ending in a newline shows one more line in the editor than it has —
+ * that phantom line takes clicks, but nothing counting the file's lines, the
+ * CLI included, agrees it exists.
+ */
+export function lastCommentableLine(document: DocumentLines): number | null {
+  let last = document.lineCount - 1;
+  if (last >= 0 && document.lineAt(last).text === '') last -= 1;
+  return last < 0 ? null : last;
+}
+
 /** Repo-relative path with forward slashes, or null when outside the root. */
 export function relativeTo(root: string, fsPath: string): string | null {
   const normalisedRoot = root.endsWith('/') ? root.slice(0, -1) : root;

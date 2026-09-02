@@ -141,8 +141,16 @@ export class Store {
     this.path = dbPathFor(repo);
     mkdirSync(dirname(this.path), { recursive: true });
     this.db = new (sqlite().DatabaseSync)(this.path);
-    this.db.exec('PRAGMA journal_mode = WAL');
+    // Armed before anything that can contend: the journal-mode change below
+    // takes locks, and without a busy handler any collision fails instantly.
     this.db.exec('PRAGMA busy_timeout = 5000');
+    // A rollback journal, not WAL. WAL coordinates through a shared-memory
+    // file, which network filesystems (NFS, weka, …) do not reliably support,
+    // and some of its lock paths fail without consulting the busy handler. A
+    // rollback journal needs nothing beyond ordinary file locks, and this
+    // database is far too small for WAL to pay. Also converts databases an
+    // older greview left in WAL mode.
+    this.db.exec('PRAGMA journal_mode = DELETE');
     this.db.exec('PRAGMA foreign_keys = ON');
     this.migrate();
   }

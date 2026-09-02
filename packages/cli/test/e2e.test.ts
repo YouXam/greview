@@ -1,8 +1,9 @@
 import { strict as assert } from 'node:assert';
 import { after, test } from 'node:test';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   chmodSync,
+  existsSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -762,4 +763,62 @@ test('a person working in an agent shell can say so', () => {
   );
   assert.equal(t.comments[0]?.authorKind, 'human');
   assert.equal(t.comments[0]?.author, 'Test', 'falls back to git config user.name');
+});
+
+/** Bytes 18-19 of a SQLite header are the write/read file-format versions: 1 for a rollback journal, 2 for WAL. */
+function journalFormat(dbPath: string): number {
+  return readFileSync(dbPath)[18]!;
+}
+
+test('the database keeps a rollback journal, which network filesystems can lock', () => {
+  const dir = makeRepo(base);
+  run<Thread>(dir, 'add', '--file', 'a.txt', '--line', '2', '-m', 'note', '--author', 'x');
+  const info = run<RepoInfo>(dir, 'repo');
+  assert.equal(journalFormat(info.dbPath), 1, 'not in WAL mode');
+  assert.ok(!existsSync(`${info.dbPath}-wal`), 'no WAL sidecar');
+});
+
+test('a database an older greview left in WAL mode converts back', () => {
+  const dir = makeRepo(base);
+  run<Thread>(dir, 'add', '--file', 'a.txt', '--line', '2', '-m', 'note', '--author', 'x');
+  const info = run<RepoInfo>(dir, 'repo');
+  const flip = spawnSync(
+    process.execPath,
+    [
+      '-e',
+      `const { DatabaseSync } = require('node:sqlite');
+       const db = new DatabaseSync(process.argv[1]);
+       db.exec('PRAGMA journal_mode = WAL');
+       db.close();`,
+      info.dbPath,
+    ],
+    { encoding: 'utf8' },
+  );
+  assert.equal(flip.status, 0, flip.stderr);
+  assert.equal(journalFormat(info.dbPath), 2, 'the old CLI left WAL behind');
+
+  run<Thread[]>(dir, 'list');
+  assert.equal(journalFormat(info.dbPath), 1, 'one command later it is a rollback journal again');
+  assert.ok(!existsSync(`${info.dbPath}-wal`), 'the WAL sidecar is cleaned up');
+});
+
+test('concurrent commands on one database all succeed', async () => {
+  const dir = makeRepo(base);
+  run<Thread>(dir, 'add', '--file', 'a.txt', '--line', '2', '-m', 'note', '--author', 'x');
+  const sync = () =>
+    new Promise<{ code: number | null; out: string }>((resolve) => {
+      const child = spawn(
+        process.execPath,
+        ['--experimental-strip-types', '--no-warnings', CLI, 'sync', '--json', '--cwd', dir],
+        { cwd: dir, env: cleanEnv() },
+      );
+      let out = '';
+      child.stdout.on('data', (d: Buffer) => (out += d.toString()));
+      child.stderr.on('data', (d: Buffer) => (out += d.toString()));
+      child.on('close', (code) => resolve({ code, out }));
+    });
+  for (let round = 0; round < 6; round++) {
+    const results = await Promise.all([sync(), sync(), sync()]);
+    for (const r of results) assert.equal(r.code, 0, `round ${round}: ${r.out}`);
+  }
 });

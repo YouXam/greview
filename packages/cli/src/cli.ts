@@ -606,7 +606,25 @@ function printHelp(parts: string[]): number {
   return 0;
 }
 
-function main(argv: string[]): number | Promise<number> {
+/**
+ * SQLITE_BUSY surviving the in-connection busy handler means a filesystem where
+ * that handler cannot do its job (some network mounts). A failed command has, by
+ * SQLite's contract, committed nothing, so re-running it whole is safe.
+ */
+const BUSY_ATTEMPTS = 4;
+
+function isBusy(e: unknown): boolean {
+  if (!(e instanceof Error)) return false;
+  const errcode = (e as { errcode?: unknown }).errcode;
+  if (typeof errcode === 'number') return (errcode & 0xff) === 5;
+  return e.message === 'database is locked';
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function main(argv: string[]): Promise<number> {
   let values: Values;
   let positionals: string[];
   try {
@@ -625,87 +643,89 @@ function main(argv: string[]): number | Promise<number> {
   }
   if (command === 'setup') return cmdSetup(positionals);
 
-  let ctx: Ctx | null = null;
-  try {
-    const repo = findRepo(cwdOf(values));
-    ctx = { repo, store: new Store(repo), json: values.json === true };
-    switch (command) {
-      case 'repo':
-        cmdRepo(ctx);
-        break;
-      case 'add':
-        cmdAdd(ctx, values);
-        break;
-      case 'list':
-      case 'ls':
-        cmdList(ctx, values);
-        break;
-      case 'show':
-        cmdShow(ctx, values, positionals);
-        break;
-      case 'reply':
-        cmdReply(ctx, values, positionals);
-        break;
-      case 'edit':
-        cmdEdit(ctx, values, positionals);
-        break;
-      case 'resolve':
-        cmdSetStatus(ctx, values, positionals, true);
-        break;
-      case 'unresolve':
-      case 'reopen':
-        cmdSetStatus(ctx, values, positionals, false);
-        break;
-      case 'rm':
-      case 'delete':
-        cmdRm(ctx, positionals);
-        break;
-      case 'sync':
-        cmdSync(ctx);
-        break;
-      case 'stats':
-        cmdStats(ctx);
-        break;
-      case 'onsubmit': {
-        const pending = cmdOnsubmit(ctx, values, positionals);
-        if (pending) return pending.then(() => 0);
-        break;
-      }
-      default:
-        process.stderr.write(`greview: unknown command "${command}"\nTry: greview help\n`);
-        return 2;
-    }
-    return 0;
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    if (values.json) {
-      process.stdout.write(`${JSON.stringify({ ok: false, error: message })}\n`);
-    } else {
-      process.stderr.write(`greview: ${message}\n`);
-    }
-    return e instanceof UsageError ? 2 : e instanceof GitError ? 3 : 1;
-  } finally {
+  for (let attempt = 1; ; attempt++) {
+    let ctx: Ctx | null = null;
     try {
-      ctx?.store.close();
-    } catch {
-      // Already closed by emit() on the success path.
+      const repo = findRepo(cwdOf(values));
+      ctx = { repo, store: new Store(repo), json: values.json === true };
+        switch (command) {
+        case 'repo':
+          cmdRepo(ctx);
+          break;
+        case 'add':
+          cmdAdd(ctx, values);
+          break;
+        case 'list':
+        case 'ls':
+          cmdList(ctx, values);
+          break;
+        case 'show':
+          cmdShow(ctx, values, positionals);
+          break;
+        case 'reply':
+          cmdReply(ctx, values, positionals);
+          break;
+        case 'edit':
+          cmdEdit(ctx, values, positionals);
+          break;
+        case 'resolve':
+          cmdSetStatus(ctx, values, positionals, true);
+          break;
+        case 'unresolve':
+        case 'reopen':
+          cmdSetStatus(ctx, values, positionals, false);
+          break;
+        case 'rm':
+        case 'delete':
+          cmdRm(ctx, positionals);
+          break;
+        case 'sync':
+          cmdSync(ctx);
+          break;
+        case 'stats':
+          cmdStats(ctx);
+          break;
+        case 'onsubmit': {
+          const pending = cmdOnsubmit(ctx, values, positionals);
+          if (pending) return pending.then(() => 0);
+          break;
+        }
+        default:
+          process.stderr.write(`greview: unknown command "${command}"\nTry: greview help\n`);
+          return 2;
+      }
+      return 0;
+    } catch (e) {
+      if (isBusy(e) && attempt < BUSY_ATTEMPTS) {
+        // Brief, jittered: the colliding writer is another short-lived greview.
+        await sleep(attempt * 150 + Math.random() * 100);
+        continue;
+      }
+      const message = e instanceof Error ? e.message : String(e);
+      if (values.json) {
+        process.stdout.write(`${JSON.stringify({ ok: false, error: message })}\n`);
+      } else {
+        process.stderr.write(`greview: ${message}\n`);
+      }
+      return e instanceof UsageError ? 2 : e instanceof GitError ? 3 : 1;
+    } finally {
+      try {
+        ctx?.store.close();
+      } catch {
+        // Already closed by emit() on the success path.
+      }
     }
   }
 }
 
-const outcome = main(process.argv.slice(2));
-if (typeof outcome === 'number') {
-  process.exitCode = outcome;
-} else {
-  // `onsubmit run` is the only asynchronous command; it sets its own exit code on
-  // failure, so a clean resolution means success.
-  void outcome.then(
-    (code) => {
-      if (process.exitCode === undefined || process.exitCode === 0) process.exitCode = code;
-    },
-    (e: unknown) => {
-      process.stderr.write(`greview: ${e instanceof Error ? e.message : String(e)}\n`);
-      process.exitCode = 1;
-    },
-  );
-}
+void main(process.argv.slice(2)).then(
+  (code) => {
+    // `onsubmit run` is the only command that sets its own exit code on failure;
+    // a clean resolution means success.
+    if (process.exitCode === undefined || process.exitCode === 0) process.exitCode = code;
+  },
+  (e: unknown) => {
+    process.stderr.write(`greview: ${e instanceof Error ? e.message : String(e)}\n`);
+    process.exitCode = 1;
+  },
+);
